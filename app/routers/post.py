@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Optional
@@ -5,10 +6,11 @@ from typing import List, Optional
 router = APIRouter(prefix="/scrape", tags=[""])
 
 class ScrapeRequest(BaseModel):
-  corporation: str
-  store: str
-  itemCheck: List[str]
   type: str
+  corporation: Optional(str)
+  store: str
+  items: List[str]
+  requestDate: datetime
 
 
 @router.post("/")
