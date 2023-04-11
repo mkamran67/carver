@@ -1,4 +1,5 @@
-dictOfStores = {
+
+dictOfStores = { 
   "safeway": {
     "url": "https://www.safeway.com",
     "name": "Safeway",
