@@ -1,11 +1,26 @@
-class State:
-  def __init__(self):
-    self.current_state = "not_running"
+import logging as logger
 
-  def set_current_state(self, current_state: str) -> None:
-    self.current_state = current_state
-  
-  def get_current_state(self) -> str:
-    return self.current_state
+
+class State:
+    def __init__(self):
+        self.current_state = "not_running"
+
+    def set_busy_state(self) -> bool:
+        try:
+            self.current_state = "busy_running"
+            return True
+        except:
+            logger.error("Error in set_busy_state")
+            pass
+        finally:
+            self.current_state = "not_running"
+        return False
+
+    def get_current_state(self) -> bool:
+        if self.current_state == "busy_running":
+            return True
+        else:
+            return False
+
 
 state = State()

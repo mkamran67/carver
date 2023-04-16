@@ -58,152 +58,192 @@ class ScrapeItemData(BaseModel):
     ratingAtStore: Optional[str]
 
 
-def getItemDataByPath(
-    driver: webdriver,
-    item: str,
-    xpathToInput: str,
-    paginationType: str,
-    xpathToPagination: str,
-    paginationElementValue: str,
-) -> ScrapeItemData:
-    """Takes in the driver and the item to be scraped
-        and returns the item's data
-    Args:
-        driver (webdriver): The Selenium webdriver.
-        item [str]: The item to get the data for.
-    Returns:
-        str: _description_
-    """
+# def getItemDataByPath(
+#     driver: webdriver,
+#     item: str,
+#     xpathToInput: str,
+#     paginationType: str,
+#     xpathToPagination: str,
+#     paginationElementValue: str,
+# ) -> ScrapeItemData:
+#     """Takes in an item to search and iterates through all the products listed.
+#     If the item is not found, then it will return None.
+#     If the item is found, then it will return a ScrapeItemData object.
 
-    try:
-        possiblePaginationElementTexts = ["Load more", "Show more"]
-        possiblePagePaginationElementTexts = ["Next page"]
+#     Args:
+#         driver (webdriver): _description_
+#         item (str): _description_
+#         xpathToInput (str): _description_
+#         paginationType (str): _description_
+#         xpathToPagination (str): _description_
+#         paginationElementValue (str): _description_
 
-        driver.find_element_by_xpath(xpathToInput).send_keys(item + Keys.ENTER)
+#     Raises:
+#         Exception: _description_
 
-        WebDriverWait(driver, 10).until(
-            listOfProducts=driver.find_element_by_xpath(
-                "/html/body/div[2]/div/div/div[2]/div/div[2]/div/div/div/div/div[2]/div[3]/div[2]/search-grid/div[1]"
-            )
-        )
+#     Returns:
+#         ScrapeItemData: _description_
+#     """
 
-        # 1. Check if we have propigating pagination or numbered
-        # Check -> if paginationType is Truthy
-        if paginationType:
-            # Get/Wait for element
-            element = WebDriverWait(driver, 10).until(
-                driver.get_element_by_xpath(xpathToPagination)
-            )
+#     try:
+#         possiblePaginationElementTexts = ["Load more", "Show more"]
+#         possiblePagePaginationElementTexts = ["Next page"]
 
-            # if no element, then raise exception
-            if not element:
-                raise Exception(f"Could not find {xpathToPagination}")
+#         driver.find_element_by_xpath(xpathToInput).send_keys(item + Keys.ENTER)
 
-            # if element exists, then keep clicking load more
-            # Handle scrolling pagination
-            if element.get_attribute(
-                "value"
-            ) == paginationElementValue or possiblePaginationElementTexts.index(
-                element.get_attribute("value")
-            ):
-                logger.info(f"Paginating for more products...")
-                WebDriverWait(driver, 10).until(
-                    driver.get_element_by_xpath(xpathToPagination)
-                )
+#         WebDriverWait(driver, 10).until(
+#             listOfProducts=driver.find_element_by_xpath(
+#                 "/html/body/div[2]/div/div/div[2]/div/div[2]/div/div/div/div/div[2]/div[3]/div[2]/search-grid/div[1]"
+#             )
+#         )
 
-                # Pagination found -> Go til no more items need to be loaded
-                while element:
-                    driver.get_element_by_xpath(xpathToPagination).click()
-                    element = WebDriverWait(driver, 10).until(
-                        driver.get_element_by_xpath(xpathToPagination)
-                    )
-            else:
-                # TODO - Handle page pagination
-                logger.info("We'd go brute force here")
-    except Exception as e:
-        return e
-    return
+#         # 1. Check if we have propigating pagination or numbered
+#         # Check -> if paginationType is Truthy
+#         if paginationType:
+#             # Get/Wait for element
+#             element = WebDriverWait(driver, 10).until(
+#                 driver.get_element_by_xpath(xpathToPagination)
+#             )
 
+#             # if no element, then raise exception
+#             if not element:
+#                 raise Exception(f"Could not find {xpathToPagination}")
 
-def scrapeByInput(scrapeRequest: ScrapeRequest) -> List[ScrapeItemData]:
-    """Accepts an input driven scrape. Meaning we know that we have an input on the page.
-    Args:
-        scrapeRequest (ScrapeRequest): We expect this to haven xpathToInput.
-    Returns:
-        List[ScrapeItemData] : Expected to return a list of ScrapeItemData objects.
-    """
-    results: List[ScrapeItemData] = []
+#             # if element exists, then keep clicking load more
+#             # Handle scrolling pagination
+#             if element.get_attribute(
+#                 "value"
+#             ) == paginationElementValue or possiblePaginationElementTexts.index(
+#                 element.get_attribute("value")
+#             ):
+#                 logger.info(f"Paginating for more products...")
+#                 WebDriverWait(driver, 10).until(
+#                     driver.get_element_by_xpath(xpathToPagination)
+#                 )
 
-    try:
-        driver = webdriver.Firefox()
-        driver.get(scrapeRequest.url)
-
-        # Scrape each item by input
-        if scrapeRequest.xpathToInput:
-            for item in scrapeRequest.items:
-                results.append(
-                    getItemDataByPath(
-                        driver,
-                        item,
-                        scrapeRequest.xpathToInput,
-                        scrapeRequest.paginationType,
-                        scrapeRequest.xpathToPagination,
-                        scrapeRequest.paginationElementValue,
-                    )
-                )
-
-        return results
-    except Exception as e:
-        return e
-    finally:
-        driver.quit()
+#                 # Pagination found -> Go til no more items need to be loaded
+#                 while element:
+#                     driver.get_element_by_xpath(xpathToPagination).click()
+#                     element = WebDriverWait(driver, 10).until(
+#                         driver.get_element_by_xpath(xpathToPagination)
+#                     )
+#             else:
+#                 # TODO - Handle page pagination
+#                 logger.info("We'd go brute force here")
+#     except Exception as e:
+#         return e
+#     return
 
 
-# def tryBeforeYouQuit(scrapeRequest: ScrapeRequest) -> None:
+# def scrapeByInput(scrapeRequest: ScrapeRequest) -> List[ScrapeItemData]:
+#     """Accepts an input driven scrape. Meaning we know that we have an input on the page.
+#     Args:
+#         scrapeRequest (ScrapeRequest): We expect this to haven xpathToInput.
+#     Returns:
+#         List[ScrapeItemData] : Expected to return a list of ScrapeItemData objects.
+#     """
+#     results: List[ScrapeItemData] = []
+
+#     try:
+#         driver = webdriver.Firefox()
+#         driver.get(scrapeRequest.url)
+
+#         # Scrape each item by input
+#         if scrapeRequest.xpathToInput:
+#             for item in scrapeRequest.items:
+#                 results.append(
+#                     getItemDataByPath(
+#                         driver,
+#                         item,
+#                         scrapeRequest.xpathToInput,
+#                         scrapeRequest.paginationType,
+#                         scrapeRequest.xpathToPagination,
+#                         scrapeRequest.paginationElementValue,
+#                     )
+#                 )
+
+#         return results
+#     except Exception as e:
+#         return e
+#     finally:
+#         driver.quit()
+
+
+# # def tryBeforeYouQuit(scrapeRequest: ScrapeRequest) -> None:
+# #     return None
+
+
+# # # TODO https://www.zenrows.com/blog/selenium-avoid-bot-detection#ip-rotation-proxy
+# def scrapeData(scrapeRequest: ScrapeRequest) -> None:
+#     results: List[ScrapeItemData] = []
+
+#     try:
+#         # 1. Check if we have items to scrape
+#         if len(scrapeRequest.items) == 0:
+#             raise Exception("No items to scrape")
+#         elif scrapeRequest.hasInput:
+#             results = scrapeByInput(scrapeRequest)
+#             print("\n\nresults\n\n")
+#             print(results)
+#         # else:
+#         #     results = tryBeforeYouQuit(scrapeRequest)
+#     except Exception as e:
+#         logger.error(
+#             "\n We've caught an error while trying to initiate the scrape request."
+#         )
+#         logger.error(e)
+#         # requests.post(
+#         #     os.environ.get("ORGANIZER_URL"), json={"error": "true", "data": results}
+#         # )
+
+#         return None
+#     # TODO - Response to Organizer
+#     # requests.post(
+#     #     os.environ.get("ORGANIZER_URL"), json={"error": "true", "data": results}
+#     # )
+
 #     return None
 
 
-# # TODO https://www.zenrows.com/blog/selenium-avoid-bot-detection#ip-rotation-proxy
-def scrapeData(scrapeRequest: ScrapeRequest) -> None:
-    results: List[ScrapeItemData] = []
+# # REVIEW This is on hold for now
+# @router.post("/")
+# async def scrape(scrapeRequest: ScrapeRequest, background_Tasks: BackgroundTasks):
+#     # TODO - Call Selenium scrape data
+#     # https://fastapi.tiangolo.com/tutorial/background-tasks/
+#     if os.environ.get("ORGANIZER_URL") == "true":
+#         background_Tasks.add_task(scrapeData, scrapeRequest)
+#     else:
+#         return Response(status_code=500)
+#     return Response(status_code=200)
 
+class Product(BaseModel):
+    name: str
+    price: int
+
+class Location(BaseModel):
+    lat: Optional[float]
+    lon: Optional[float]
+    city_name: Optional[str]
+    address: Optional[str]
+    zip_code: Optional[str]
+
+
+def getProductsInCategory() -> List[Product]:
+
+@router.post("/seedproducts")
+async def seedProducts(categoryList : List[str], location: Location):
     try:
-        # 1. Check if we have items to scrape
-        if len(scrapeRequest.items) == 0:
-            raise Exception("No items to scrape")
-        elif scrapeRequest.hasInput:
-            results = scrapeByInput(scrapeRequest)
-            print("\n\nresults\n\n")
-            print(results)
-        # else:
-        #     results = tryBeforeYouQuit(scrapeRequest)
+        state.set_busy_state()
+        for category in categoryList:
+            getProductsInCategory(category)
+        
+
+
+
     except Exception as e:
-        logger.error(
-            "\n We've caught an error while trying to initiate the scrape request."
-        )
-        logger.error(e)
-        # requests.post(
-        #     os.environ.get("ORGANIZER_URL"), json={"error": "true", "data": results}
-        # )
-
-        return None
-    # TODO - Response to Organizer
-    # requests.post(
-    #     os.environ.get("ORGANIZER_URL"), json={"error": "true", "data": results}
-    # )
-
-    return None
-
-
-@router.post("/")
-async def scrape(scrapeRequest: ScrapeRequest, background_Tasks: BackgroundTasks):
-    # TODO - Call Selenium scrape data
-    # https://fastapi.tiangolo.com/tutorial/background-tasks/
-    if os.environ.get("ORGANIZER_URL") == "true":
-        background_Tasks.add_task(scrapeData, scrapeRequest)
-    else:
-        return Response(status_code=500)
-    return Response(status_code=200)
+        print(e)
+        # TODO - properr error logger
+        return "failed"
 
 
 @router.get("/status")
