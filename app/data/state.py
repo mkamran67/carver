@@ -8,6 +8,7 @@ class State:
     def set_busy_state(self) -> bool:
         try:
             self.current_state = "busy_running"
+            logger.info("State set to busy_running")
             return True
         except:
             logger.error("Error in set_busy_state")

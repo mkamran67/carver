@@ -5,11 +5,14 @@ from pydantic import BaseModel
 from typing import List, Optional
 from app.data.state import state
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.common.action_chains import ActionChains
 from app.data.constants import dictOfStores
-import logging as logger
+import logging as log
 import requests
 import os
 
@@ -116,7 +119,7 @@ class ScrapeItemData(BaseModel):
 #             ) == paginationElementValue or possiblePaginationElementTexts.index(
 #                 element.get_attribute("value")
 #             ):
-#                 logger.info(f"Paginating for more products...")
+#                 log.info(f"Paginating for more products...")
 #                 WebDriverWait(driver, 10).until(
 #                     driver.get_element_by_xpath(xpathToPagination)
 #                 )
@@ -129,7 +132,7 @@ class ScrapeItemData(BaseModel):
 #                     )
 #             else:
 #                 # TODO - Handle page pagination
-#                 logger.info("We'd go brute force here")
+#                 log.info("We'd go brute force here")
 #     except Exception as e:
 #         return e
 #     return
@@ -188,10 +191,10 @@ class ScrapeItemData(BaseModel):
 #         # else:
 #         #     results = tryBeforeYouQuit(scrapeRequest)
 #     except Exception as e:
-#         logger.error(
+#         log.error(
 #             "\n We've caught an error while trying to initiate the scrape request."
 #         )
-#         logger.error(e)
+#         log.error(e)
 #         # requests.post(
 #         #     os.environ.get("ORGANIZER_URL"), json={"error": "true", "data": results}
 #         # )
@@ -216,9 +219,11 @@ class ScrapeItemData(BaseModel):
 #         return Response(status_code=500)
 #     return Response(status_code=200)
 
+
 class Product(BaseModel):
     name: str
     price: int
+
 
 class Location(BaseModel):
     lat: Optional[float]
@@ -228,22 +233,133 @@ class Location(BaseModel):
     zip_code: Optional[str]
 
 
-def getProductsInCategory() -> List[Product]:
+# Below are a list of espected_conditions -> EC ->
+# title_is
+# title_contains
+# presence_of_element_located
+# visibility_of_element_located
+# visibility_of
+# presence_of_all_elements_located
+# text_to_be_present_in_element
+# text_to_be_present_in_element_value
+# frame_to_be_available_and_switch_to_it
+# invisibility_of_element_located
+# element_to_be_clickable
+# staleness_of
+# element_to_be_selected
+# element_located_to_be_selected
+# element_selection_state_to_be
+# element_located_selection_state_to_be
+# alert_is_present
 
-@router.post("/seedproducts")
-async def seedProducts(categoryList : List[str], location: Location):
+
+def getProductsInCategory(driver, category: str) -> List[Product]:
     try:
-        state.set_busy_state()
-        for category in categoryList:
-            getProductsInCategory(category)
-        
+        hasPagination = True
 
+        # 1. Get search bar
+        log.info("finding input element")
+        try:
+            pageInputElements = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located(
+                    (By.XPATH, '//*[@id="skip-main-content"]')
+                )
+            )
+        except TimeoutException as TE:
+            raise TimeoutException("")
+            # TODO - Handle timeout
 
+        if len(pageInputElements) == 0:
+            raise Exception("Could not find input")
+        else:
+            log.info("Found input element")
+
+        pageInputElement = pageInputElements[0]
+
+        # 2. Input category text and
+        # pageInputElement.send_keys("black" + Keys.SPACE + "beans" + Keys.ENTER)
+        actions = ActionChains(driver)
+        actions.click(pageInputElement)
+        actions.send_keys(category, Keys.ENTER)
+        actions.perform()
+
+        # 3. Accept cookies banner
+        cookieBanner = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located(
+                (By.XPATH, '//*[@id="onetrust-reject-all-handler"]')
+            )
+        )
+
+        cookieBanner.click()
+
+        # 4. Check for pagination -> Load all in 1 page
+        while hasPagination:
+            log.info("Loading more products...")
+            paginationElements = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located(
+                    (
+                        By.XPATH,
+                        "/html/body/div[2]/div/div/div[2]/div/div[2]/div/div/div/div/div[2]/div[3]/div[2]/search-grid/div[4]/button",
+                    )
+                )
+            )
+            log.info(f"Found {len(paginationElements)} pagination elements")
+
+            if len(paginationElements) == 0:
+                log.info("No pagination")
+                hasPagination = False
+                break
+            else:
+                paginationElement = paginationElements[0]
+                paginationElement.click()
+
+        log.info("Loaded all products")
+
+        # 4. Get data from each product on the page
+        productsList = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.TAG_NAME, "product-item-v2"))
+        )
+
+        log.info(f"Found {len(productsList)} products")
+
+        # 5. Return list of products
+
+    except TimeoutException as te:
+        log.error(te)
+        return "failed - could not find a required element"
 
     except Exception as e:
-        print(e)
-        # TODO - properr error logger
+        log.error(te)
         return "failed"
+
+
+@router.post("/seedproducts")
+async def seedProducts(categoryList: List[str]):
+    try:
+        state.set_busy_state()
+
+        # 1. Open browser and go to store site
+        driver = webdriver.Firefox()
+        driver.get("https://www.safeway.com/")
+
+        # 2. Scrape each category
+        # TODO -> Add as a background task
+        for category in categoryList:
+            log.info(f"Seeding {category}")
+            getProductsInCategory(driver, category)
+        # 3. Save each category + list of products
+
+        # 4. Close browser
+
+        # 5. Remove duplicate products
+
+    except Exception as e:
+        log.info("Failed to seed")
+        log.error(e)
+        # TODO - properr error log
+        return "failed"
+    finally:
+        driver.quit()
 
 
 @router.get("/status")
@@ -253,5 +369,5 @@ async def get_scrape_status() -> str:
         return currentStatus
     except Exception as e:
         print(e)
-        # TODO - properr error logger
+        # TODO - properr error log
         return "failed"
