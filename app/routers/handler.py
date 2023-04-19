@@ -1,11 +1,12 @@
+import time
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from app.data.state import state
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.wait import WebDriverWait
@@ -265,9 +266,8 @@ def getProductsInCategory(driver, category: str) -> List[Product]:
                     (By.XPATH, '//*[@id="skip-main-content"]')
                 )
             )
-        except TimeoutException as TE:
-            raise TimeoutException("")
-            # TODO - Handle timeout
+        except TimeoutException:
+            raise TimeoutException("Timeout occured for finding input element")
 
         if len(pageInputElements) == 0:
             raise Exception("Could not find input")
@@ -276,6 +276,9 @@ def getProductsInCategory(driver, category: str) -> List[Product]:
 
         pageInputElement = pageInputElements[0]
 
+        # 1.5 Check if input has text
+        pageInputElement.clear()
+
         # 2. Input category text and
         # pageInputElement.send_keys("black" + Keys.SPACE + "beans" + Keys.ENTER)
         actions = ActionChains(driver)
@@ -283,27 +286,20 @@ def getProductsInCategory(driver, category: str) -> List[Product]:
         actions.send_keys(category, Keys.ENTER)
         actions.perform()
 
-        # 3. Accept cookies banner
-        cookieBanner = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located(
-                (By.XPATH, '//*[@id="onetrust-reject-all-handler"]')
-            )
-        )
-
-        cookieBanner.click()
-
-        # 4. Check for pagination -> Load all in 1 page
+        # 3. Check for pagination -> Load all in 1 page
         while hasPagination:
-            log.info("Loading more products...")
-            paginationElements = WebDriverWait(driver, 10).until(
-                EC.presence_of_all_elements_located(
-                    (
-                        By.XPATH,
-                        "/html/body/div[2]/div/div/div[2]/div/div[2]/div/div/div/div/div[2]/div[3]/div[2]/search-grid/div[4]/button",
+            try:
+                paginationElements = WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located(
+                        (
+                            By.XPATH,
+                            "/html/body/div[2]/div/div/div[2]/div/div[2]/div/div/div/div/div[2]/div[3]/div[2]/search-grid/div[4]/button",
+                        )
                     )
                 )
-            )
-            log.info(f"Found {len(paginationElements)} pagination elements")
+            except TimeoutException:
+                log.warning("Timeout occured for finding pagination")
+                paginationElements = []
 
             if len(paginationElements) == 0:
                 log.info("No pagination")
@@ -315,21 +311,62 @@ def getProductsInCategory(driver, category: str) -> List[Product]:
 
         log.info("Loaded all products")
 
-        # 4. Get data from each product on the page
-        productsList = WebDriverWait(driver, 10).until(
-            EC.presence_of_all_elements_located((By.TAG_NAME, "product-item-v2"))
-        )
+        returnList = []
+        # 4. Get all products on the page
+        try:
+            productsList = WebDriverWait(driver, 10).until(
+                EC.presence_of_all_elements_located((By.TAG_NAME, "product-item-v2"))
+            )
+        except TimeoutException:
+            raise TimeoutException("No products found")
 
         log.info(f"Found {len(productsList)} products")
 
-        # 5. Return list of products
+        time.sleep(3)
 
-    except TimeoutException as te:
-        log.error(te)
+        # 5. Get data from each product on the page
+        for product in productsList:
+            name = ""
+            price = ""
+
+            try:
+                name = product.find_element(By.CLASS_NAME, "product-title__name").text
+                price = product.find_element(By.CLASS_NAME, "product-price__saleprice")
+
+                try:
+                    name = product.find_element(
+                        By.CLASS_NAME, "product-item-title-tooltip__inner"
+                    ).text
+                except NoSuchElementException:
+                    pass
+
+                splitPrice = price.text
+                listPrice = splitPrice.split()[2]
+                sortedList = listPrice[1:].split(".")
+
+                price = {
+                    "dollars": int(sortedList[0]),
+                    "cents": int(sortedList[1]),
+                }
+
+                returnList.append({"name": name, "price": price})
+            except TimeoutError:
+                log.warning(
+                    f"Timeout occured for finding product Name: {name} -- Price: {price}"
+                )
+            except NoSuchElementException:
+                log.warning(f"Could not find product Name: {name} -- Price: {price}")
+            except Exception as e:
+                log.error(e)
+
+        return returnList
+
+    except TimeoutException as TE:
+        log.error(TE)
         return "failed - could not find a required element"
 
     except Exception as e:
-        log.error(te)
+        log.error(e)
         return "failed"
 
 
@@ -338,34 +375,51 @@ async def seedProducts(categoryList: List[str]):
     try:
         state.set_busy_state()
 
+        products = {}
+
         # 1. Open browser and go to store site
         driver = webdriver.Firefox()
         driver.get("https://www.safeway.com/")
 
-        # 2. Scrape each category
+        time.sleep(2)
+
+        # 2. Cookie handler
+        try:
+            cookieBanner = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, '//*[@id="onetrust-reject-all-handler"]')
+                )
+            )
+
+            cookieBanner.click()
+
+        except TimeoutException:
+            log.warning("Timeout occured for finding cookie banner")
+        except NoSuchElementException:
+            log.warning("Could not find cookie banner")
+
+        # 3. Scrape each category
         # TODO -> Add as a background task
         for category in categoryList:
             log.info(f"Seeding {category}")
-            getProductsInCategory(driver, category)
-        # 3. Save each category + list of products
+            products[category] = getProductsInCategory(driver, category)
 
-        # 4. Close browser
-
-        # 5. Remove duplicate products
+        log.info("Seeding complete")
+        return JSONResponse(status_code=200, content=products)
 
     except Exception as e:
         log.info("Failed to seed")
         log.error(e)
-        # TODO - properr error log
         return "failed"
     finally:
-        driver.quit()
+        # driver.quit()
+        state.set_idle_state()
 
 
 @router.get("/status")
 async def get_scrape_status() -> str:
     try:
-        currentStatus = state.get_current_state()
+        currentStatus = state.isStateBusy()
         return currentStatus
     except Exception as e:
         print(e)

@@ -17,7 +17,17 @@ class State:
             self.current_state = "not_running"
         return False
 
-    def get_current_state(self) -> bool:
+    def set_idle_state(self) -> bool:
+        try:
+            self.current_state = "not_running"
+            return True
+        except:
+            logger.error("Error in set_idle_state")
+            pass
+
+        return False
+
+    def isStateBusy(self) -> bool:
         if self.current_state == "busy_running":
             return True
         else:
