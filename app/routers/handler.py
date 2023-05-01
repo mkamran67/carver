@@ -327,29 +327,34 @@ def getProductsInCategory(driver, category: str) -> List[Product]:
         # 5. Get data from each product on the page
         for product in productsList:
             name = ""
-            price = ""
+            toolTipName = ""
+            price = None
+            finalPriceDict = None
 
             try:
                 name = product.find_element(By.CLASS_NAME, "product-title__name").text
                 price = product.find_element(By.CLASS_NAME, "product-price__saleprice")
 
                 try:
-                    name = product.find_element(
+                    toolTipName = product.find_element(
                         By.CLASS_NAME, "product-item-title-tooltip__inner"
-                    ).text
+                    ).get_attribute("innerHTML")
                 except NoSuchElementException:
                     pass
 
-                splitPrice = price.text
-                listPrice = splitPrice.split()[2]
-                sortedList = listPrice[1:].split(".")
+                if len(toolTipName) > 1:
+                    name = toolTipName
 
-                price = {
-                    "dollars": int(sortedList[0]),
-                    "cents": int(sortedList[1]),
+                splitText = price.text.split(".")
+                dollars = splitText[0][1:]
+                cents = splitText[1][:2]
+
+                finalPriceDict = {
+                    "dollars": int(dollars),
+                    "cents": int(cents),
                 }
 
-                returnList.append({"name": name, "price": price})
+                returnList.append({"name": name, "price": finalPriceDict})
             except TimeoutError:
                 log.warning(
                     f"Timeout occured for finding product Name: {name} -- Price: {price}"
@@ -412,7 +417,7 @@ async def seedProducts(categoryList: List[str]):
         log.error(e)
         return "failed"
     finally:
-        # driver.quit()
+        driver.quit()
         state.set_idle_state()
 
 
